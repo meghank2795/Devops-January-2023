@@ -47,12 +47,12 @@ Terraform Provider
 		}
 		
 		provider "aws" {
-			alias = "region1"
+			alias = "provider1"
 			region = "us-east-1"
 		}
 
 		provider "aws" {
-			alias = "region2"
+			alias = "provider2"
 			region = "us-east-2"
 		}		
 		
@@ -89,7 +89,7 @@ Terraform init
 		The insitializations steps are: 
 			1. Initializing the Backend ....
 			2. Initializing provider plugins ...
-			3. Initializing the child modules ...
+			3. Initializing the modules ...
 			
 terraform plan 
 	- the terraform plan is used to create a execution plan which internally performs a refresh 
@@ -105,20 +105,20 @@ terraform plan
 
 terraform apply 
 	- The terraform apply command is used to apply the planned changes to the actual cloud 
-	  insfrasructure. 
+	  infrastructure. 
 	- This will internally run the plan again then with the user confirmation the predicted 
 	  changes will be applied.
 		
 	To apply changes will out user confirmation 
 		terraform apply --auto-approve
 	
-	To run a perticular terraform script
+	To run a particular terraform script
 		terraform apply <script>.tf <script1>.tf
 		
 	To apply a plan file
 		terraform apply <plan_file>
 			
-tarraform destroy 
+Terraform destroy 
 	- This is used to destroy the resources which are manged by this current terraform 
 	  scripts.
     - Crate a destroy plan
@@ -183,13 +183,173 @@ Terraform module
 	All the terraform scripts in a folder is called a module 
 
 	Root module 
-	- The .tf files in the main working directory is root module where we have .terrform folder 	
+	- The .tf files in the main working directory is root module where we have .terraform folder 	
 	  or .tfstate 
 	- Where we run terraform init 
 	- Every terraform script should be in a module.
 
 	Child module 
-	- Terraform scripts defined in a sub-folder inside root module
+	- Terraform scripts defined in a sub-folder inside root module or in a remote place like github, s3 etc..
 	- We can segregate the scripts instead writing every this in same script.
 	- We can reuse the child modules in other projects also.
 	- These are always user defined 			
+
+terraform.tfvars vs variables.tf 
+	- variables.tf we can have variable block which acts as input to our terraform scripts.
+	- tf.vars is a way defining the default value to input variables.
+
+	we use variables.tf to declare input variables and we use tf.vars to assign default value to input variables.
+	To plan/apply with a particular .tfvars file 
+		terraform plan -var-file=terraform.tfvars
+		terraform apply -var-file=terraform.tfvars
+
+To update the module whose source is from github/some remote 
+	terraform get -update
+
+Provisioners 
+	- Provisioners are used to copy files and directories, run command from terraform source machine to cloud 
+	  resources as a part of resource creation.
+	- They are similar to user-data scripts.
+	- Most Provisioners requires authentication to run command via ssh or WinRM and we need 
+	  define the connection.
+		(connection is a sub-block)
+		connectio {
+		     type = "ssh"
+		     user = "root"
+		     password = ""
+		     host = "<ip>"				
+		}	
+	 
+	file 
+	    - The file Provisioner is used to copy file or directories from terraform project to cloud 
+	      compute resource.
+	    - This provisioner needs a connection to cloud resource.
+	    	 	
+	remote-exec 
+	    - The remote-exec Provisioner is used to run command or script from terraform project to cloud 
+	      compute resource.
+	    - This provisioner needs a connection to cloud resource.
+
+	
+	1. file provisioner - should find a file /home/ubuntu/test.txt
+	2. remote-exec - jq,git installed and file /home/ubuntu/remote-exec.txt
+	3. local-exec - creates file ./conf/ec2_ips.txt (with ec2 ip address)
+
+Assignment: 
+	1. Create ec2 machine with jenkins installed using terraform 
+	2. Output should be jenkins admin password and jenkins url
+
+Terraform refresh 
+	- Terraform refresh will find the updates done in the cloud resources by comparing the changes with state file.	
+	- This won't modify your real remote objects, but it will modify the the Terraform state.
+
+Null resource 		
+	- The null resoruce will have the complete lifecycle support but there will be no change in the cloud configurations.
+	- We can use triggers to collect the data of some resources.
+	- We can use connections to connect ot resoruce using provisioners.
+	- The triggers argument allows specifying an arbitory set of values only when changed, triiger will update the value.
+	
+		resoruce "null_resource" "<resource_name>" {
+			
+		}
+
+
+
+
+Terraform loops (count and for_each)	
+	resource "null_resource" "loop_simple" {
+		count = 2 
+	}
+	
+	output "loop_out" {
+		value = null_resource.loop_simple
+	}
+	
+	
+	List count example
+	
+	locals {
+		names = ["bucket1","bucket2","bucket3","bucket4"]
+	}
+	
+	resource "null_resource" "names" {
+		count = length(local.names)
+		triggers = {
+			name = local.names[count.index]
+		}
+	}
+	
+	output "list_out" {
+		value = null_resource.names
+	}
+	
+	
+	List for_each example
+	
+	locals {
+		names = ["bucket1","bucket2","bucket3","bucket4"]
+	}
+	
+	resource "null_resource" "names" {
+		for_each = toset(local.names)
+		triggers = {
+			name = each.value
+		}
+	}
+	
+	output "list_out" {
+		value = null_resource.names
+	}
+	
+	Map for_each example
+	
+	locals {
+		names = { 
+			bucket1 = "region1"
+			bucket2 = "region2"
+			bucket3 = "region3"
+			bucket4 = "region4"
+		}
+	}
+	
+	resoruce "null_resource" "names" {
+		for_each = local.names
+		triggers = {
+			bucket = each.key
+			region = each.value
+		}
+	}
+	
+	output "list_out" {
+		value = null_resource.names
+	}
+
+
+Terraform workspace 
+	- workspace are a way of managing different set of statefiles which are independent to 
+	  each other.
+	- Every configuration should be in a workspace.
+	- "default" is the default workspace in terraform 
+	
+	To list workspace
+		terraform workspace list
+	
+	To create workspace 
+		terraform workspace new <workspace_name>
+
+	To switch between workspace
+		terraform workspace select <workspace_name>
+	
+	To delete workspace 
+		terraform workspace delete <workspace_name>
+
+	Usage: 
+	   -  We can deploy different version of terraform scripts with states associated with it.
+	   -  We can maintain different set of infrastructure with same terraform repo with different 
+	      state files.
+	   -  We can deploy based on environment categorisation.
+
+data source / data resource 
+	- A data source is used to get the information dynamically from cloud.
+	- This block is read-only and this will be always executed on every plan and apply.
+	- we can query the required information and filter the field we want.
